@@ -45,7 +45,7 @@ public class WebIntent extends CordovaPlugin {
                 }
 
                 // Parse the arguments
-				final CordovaResourceApi resourceApi = webView.getResourceApi();
+                final CordovaResourceApi resourceApi = webView.getResourceApi();
                 JSONObject obj = args.getJSONObject(0);
                 String type = obj.has("type") ? obj.getString("type") : null;
                 Uri uri = obj.has("url") ? resourceApi.remapUri(Uri.parse(obj.getString("url"))) : null;
@@ -88,8 +88,12 @@ public class WebIntent extends CordovaPlugin {
                 Intent i = ((CordovaActivity)this.cordova.getActivity()).getIntent();
                 String extraName = args.getString(0);
                 if (i.hasExtra(extraName)) {
-                    //return new PluginResult(PluginResult.Status.OK, i.getStringExtra(extraName));
-                    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, i.getStringExtra(extraName)));
+                    String r = i.getStringExtra(extraName);
+                    if (null == r) {
+                        r = ((Uri) i.getParcelableExtra(extraName)).toString();
+                    }
+
+                    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, r));
                     return true;
                 } else {
                     //return new PluginResult(PluginResult.Status.ERROR);
@@ -109,21 +113,20 @@ public class WebIntent extends CordovaPlugin {
                 callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, uri));
                 return true;
             } else if (action.equals("onNewIntent")) {
-            	//save reference to the callback; will be called on "new intent" events
+                //save reference to the callback; will be called on "new intent" events
                 this.onNewIntentCallbackContext = callbackContext;
-        
+
                 if (args.length() != 0) {
                     callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.INVALID_ACTION));
                     return false;
                 }
-                
+
                 PluginResult result = new PluginResult(PluginResult.Status.NO_RESULT);
                 result.setKeepCallback(true); //re-use the callback on intent events
                 callbackContext.sendPluginResult(result);
                 return true;
                 //return result;
-            } else if (action.equals("sendBroadcast")) 
-            {
+            } else if (action.equals("sendBroadcast")) {
                 if (args.length() != 1) {
                     //return new PluginResult(PluginResult.Status.INVALID_ACTION);
                     callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.INVALID_ACTION));
@@ -150,7 +153,17 @@ public class WebIntent extends CordovaPlugin {
                 //return new PluginResult(PluginResult.Status.OK);
                 callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK));
                 return true;
+            } else if (action.equals("removeExtra")) {
+                if (args.length() != 1) {
+                    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.INVALID_ACTION));
+                    return false;
+                }
+                Intent i = ((CordovaActivity)this.cordova.getActivity()).getIntent();
+                String extraName = args.getString(0);
+                i.removeExtra(extraName);
+                callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK));
             }
+
             //return new PluginResult(PluginResult.Status.INVALID_ACTION);
             callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.INVALID_ACTION));
             return false;
@@ -165,17 +178,60 @@ public class WebIntent extends CordovaPlugin {
 
     @Override
     public void onNewIntent(Intent intent) {
-    	 
+
+        super.onNewIntent(intent);
+        ((CordovaActivity)this.cordova.getActivity()).setIntent(intent);
+		JSONObject jsonContent = new JSONObject();
         if (this.onNewIntentCallbackContext != null) {
-        	PluginResult result = new PluginResult(PluginResult.Status.OK, intent.getDataString());
-        	result.setKeepCallback(true);
+			if (intent.hasExtra("android.intent.extra.STREAM")) {
+                    String r = intent.getStringExtra("android.intent.extra.STREAM");
+                    if (null == r) {
+                        r = ((Uri) intent.getParcelableExtra("android.intent.extra.STREAM")).toString();
+                    }
+                    try
+                    {
+						jsonContent.put("android.intent.extra.STREAM", r);
+					}
+					catch(JSONException ex) {
+						ex.printStackTrace();
+					}
+            }
+			if (intent.hasExtra("android.intent.extra.SUBJECT")) {
+                    String r = intent.getStringExtra("android.intent.extra.SUBJECT");
+                    if (null == r) {
+                        r = ((Uri) intent.getParcelableExtra("android.intent.extra.SUBJECT")).toString();
+                    }
+                    try
+                    {
+						jsonContent.put("android.intent.extra.SUBJECT", r);
+					}
+					catch(JSONException ex) {
+						ex.printStackTrace();
+					}
+            }
+			if (intent.hasExtra("android.intent.extra.TEXT")) {
+                    String r = intent.getStringExtra("android.intent.extra.TEXT");
+                    if (null == r) {
+                        r = ((Uri) intent.getParcelableExtra("android.intent.extra.TEXT")).toString();
+                    }
+                    try
+                    {
+						jsonContent.put("android.intent.extra.TEXT", r);
+					}
+					catch(JSONException ex) {
+						ex.printStackTrace();
+					}
+            }
+
+            PluginResult result = new PluginResult(PluginResult.Status.OK, jsonContent.toString());
             this.onNewIntentCallbackContext.sendPluginResult(result);
+            result.setKeepCallback(true);
         }
     }
 
     void startActivity(String action, Uri uri, String type, Map<String, String> extras) {
         Intent i = (uri != null ? new Intent(action, uri) : new Intent(action));
-        
+
         if (type != null && uri != null) {
             i.setDataAndType(uri, type); //Fix the crash problem with android 2.3.6
         } else {
@@ -183,7 +239,7 @@ public class WebIntent extends CordovaPlugin {
                 i.setType(type);
             }
         }
-        
+
         for (String key : extras.keySet()) {
             String value = extras.get(key);
             // If type is text html, the extra text must sent as HTML
@@ -192,7 +248,7 @@ public class WebIntent extends CordovaPlugin {
             } else if (key.equals(Intent.EXTRA_STREAM)) {
                 // allowes sharing of images as attachments.
                 // value in this case should be a URI of a file
-				final CordovaResourceApi resourceApi = webView.getResourceApi();
+                final CordovaResourceApi resourceApi = webView.getResourceApi();
                 i.putExtra(key, resourceApi.remapUri(Uri.parse(value)));
             } else if (key.equals(Intent.EXTRA_EMAIL)) {
                 // allows to add the email address of the receiver
